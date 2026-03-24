@@ -451,6 +451,10 @@ async def sa(ctx):
 @bot.command()
 async def bb(ctx):
     await ctx.send(f'Hoşçakal {ctx.author.mention}')
+    
+@bot.command()
+async def pubgm(ctx):
+    await ctx.send(f'Haydi Sende Popülerlik Atarak Bize Destek Ol  ➤ 5562964112')
 
 @bot.command()
 async def gacaman(ctx):
@@ -463,10 +467,18 @@ async def dc(ctx):
 @bot.command()
 async def insta(ctx):
     await ctx.send('https://instagram.com/s2gmaxg')
+    
+@bot.command()
+async def insta2(ctx):
+    await ctx.send('https://www.instagram.com/nocontextbarisg')
 
 @bot.command()
 async def yt(ctx):
     await ctx.send('https://youtube.com/@s2gmaxg')
+    
+@bot.command()
+async def tt(ctx):
+    await ctx.send('https://tiktok.com/@s2gmaxgtr')
 
 
 #------------------------------------------------------------------------------------------
