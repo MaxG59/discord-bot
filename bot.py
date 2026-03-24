@@ -12,8 +12,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-#----------------------- BOT TOKENI VE SUNUCU ID -----------------------
-
 #----------------------- BOT NESNESI OLUŞTURMA --------------------------
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
@@ -23,16 +21,29 @@ user_warnings = {}
 MUTE_DURATION_SECONDS = 2 * 60 * 60  # 2 saat
 MUTE_ROLE_NAME = "Susturuldu"
 
+BLOCKED_ROLE_NAMES = ["Mekanın Sahibi", ".", "Master of Nocontext", "Nocontext Yöneticiler", "Nocontext Moderatörler", "Nocontext Botlar", "Nocontext Yetkililer", "^"]
+BLOCKED_ROLE_IDS = [1266414855494303804, 1266414855510818936, 1266414855494303803, 1266414855494303802, 1266414855494303800, 1266414855494303798, 1266414855494303799, 1419085487431356571]
+
 forbidden_words = ["amk", "sg", "oc", "skm", "amcık", "oç", "siktir", "yarrak", "am", "piç", "amcı", "pipi", "orospu", "göt", "kahpe", "şerefsiz", "ananı", "mal", "gerizekalı", "aptal", "pezevenk", "puşt", "sikik", "oe", "porno", "gay", "lezbiyen", "travesti", "sikerim", "aq", "aw", "sikik"]
-invite_pattern = re.compile(r"(discord\.gg/|discord\.com/invite/)")
 
 FLOOD_LIMIT = 5
 FLOOD_MSG_COUNT = 3
 user_message_times = {}
-
 warnings = defaultdict(list)
+LOG_CHANNEL_ID = 1440794685051240529
 
-LOG_CHANNEL_ID = 1372936287488573480
+# Helper: blocked role kontrolü
+def member_has_blocked_role(member: discord.Member) -> bool:
+    if not member:
+        return False
+    for r in member.roles:
+        if r is None:
+            continue
+        if r.id in BLOCKED_ROLE_IDS:
+            return True
+        if r.name in BLOCKED_ROLE_NAMES:
+            return True
+    return False
 
 #----------------------- BOT HAZIR OLAYI --------------------------------
 @bot.event
@@ -42,7 +53,7 @@ async def on_ready():
 #----------------------- ÜYE SUNUCUDA KATILDIĞINDA ---------------------
 @bot.event
 async def on_member_join(member):
-    rol = discord.utils.get(member.guild.roles, name="Üye")
+    rol = discord.utils.get(member.guild.roles, name="Nocontext Üyeler")
     if rol:
         await member.add_roles(rol)
 
@@ -51,33 +62,32 @@ async def on_member_join(member):
 async def on_member_remove(member):
     kanal = discord.utils.get(member.guild.text_channels, name="gideni-görme")
     if kanal:
-        await kanal.send(f"**{member.name}** ayrıldı **S2GEsports** Bye Bye **{member.name}**...")
+        await kanal.send(f"**{member.name}** ayrıldı **Nocontext G** Bye Bye **{member.name}**...")
 
 #----------------------- UYARI VE XP & LEVEL SISTEMI --------------------
-
 level_roles = {
-    2: 1372940201378185417,
-    15: 820231840921157642,
-    25: 820234560137592853,
-    40: 820232958996381697,
-    50: 820234739247349780
+    10: 1266414855473074209,
+    15: 1266414855473074210,
+    25: 1266414855473074211,
+    40: 1266414855473074212,
+    50: 1266414855473074213,
+    75: 1266414855473074214
 }
-
 user_data = {}  # global veri saklama
 
+invite_regex = re.compile(r"(?:https?://)?(?:www\.)?(?:discord\.gg/|discord(?:app)?\.com/invite/)[A-Za-z0-9\-]+", re.IGNORECASE)
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    user_id = message.author.id
     guild = message.guild
-    if guild is None:
-        return  # DM'de işlem yapma
+    if not guild:
+        return
 
-    member = guild.get_member(user_id)
-    if member is None:
+    member = guild.get_member(message.author.id)
+    if not member:
         return
 
     content = message.content.lower()
@@ -87,9 +97,10 @@ async def on_message(message):
         if word.strip() != "":
             pattern = r'\b' + re.escape(word) + r'\b'
             if re.search(pattern, content, re.IGNORECASE):
-                await message.delete()
-                await user_warn(message, "Yasaklı kelime kullanımı")
-                await log_warn(message, bot.user, "Yasaklı kelime kullanımı")
+                if not member_has_blocked_role(member):  # Engellenenler uyarılmaz
+                    await message.delete()
+                    await user_warn(message, "Yasaklı kelime kullanımı")
+                    await log_warn(message, bot.user, "Yasaklı kelime kullanımı")
                 return
 
     # --- Büyük harf spam engelleme ---
@@ -97,49 +108,51 @@ async def on_message(message):
         uppercase_count = sum(1 for c in message.content if c.isupper())
         uppercase_ratio = uppercase_count / len(message.content)
         if uppercase_ratio > 0.7:
-            await message.delete()
-            await user_warn(message, "Büyük harf kullanımı")
-            await log_warn(message, bot.user, "Büyük harf kullanımı")
+            if not member_has_blocked_role(member):
+                await message.delete()
+                await user_warn(message, "Büyük harf kullanımı")
+                await log_warn(message, bot.user, "Büyük harf kullanımı")
             return
 
     # --- Emoji spam engelleme ---
     emoji_count = len(re.findall(r"<a?:\w+:\d+>|[\U0001F600-\U0001F64F]|[\U0001F300-\U0001F5FF]", message.content))
-    if emoji_count > 7:
-        await message.delete()
-        await user_warn(message, "Emoji spam")
-        await log_warn(message, bot.user, "Emoji spam")
+    if emoji_count >= 6:
+        if not member_has_blocked_role(member):
+            await message.delete()
+            await user_warn(message, "Emoji spam")
+            await log_warn(message, bot.user, "Emoji spam")
         return
 
     # --- Flood engelleme ---
     now = asyncio.get_running_loop().time()
-    times = user_message_times.get(user_id, [])
+    times = user_message_times.get(message.author.id, [])
     times = [t for t in times if now - t < FLOOD_LIMIT]
     times.append(now)
-    user_message_times[user_id] = times
-
+    user_message_times[message.author.id] = times
     if len(times) > FLOOD_MSG_COUNT:
-        await message.delete()
-        await user_warn(message, "Tekrarlanan yazı")
-        await log_warn(message, bot.user, "Tekrarlanan yazı")
+        if not member_has_blocked_role(member):
+            await message.delete()
+            await user_warn(message, "Tekrarlanan yazı")
+            await log_warn(message, bot.user, "Tekrarlanan yazı")
         return
 
     # --- Davet linki engelleme ---
-    if invite_pattern.search(content):
-        await message.delete()
-        await user_warn(message, "Link paylaşım")
-        await log_warn(message, bot.user, "Link paylaşım")
+    if invite_regex.search(content):
+        if not member_has_blocked_role(member):
+            await message.delete()
+            await user_warn(message, "Link paylaşım")
+            await log_warn(message, bot.user, "Link paylaşım")
         return
 
     # --- XP ve seviye sistemi ---
+    user_id = message.author.id
     if user_id not in user_data:
         user_data[user_id] = {"xp": 0, "level": 1}
 
     user_data[user_id]["xp"] += 10
-
     level = user_data[user_id]["level"]
     xp = user_data[user_id]["xp"]
     xp_needed = 100 + (level - 1) * 300
-
     leveled_up = False
 
     while xp >= xp_needed:
@@ -158,7 +171,6 @@ async def on_message(message):
                     previous_role_id = rid
 
         new_role_id = level_roles.get(level)
-
         if new_role_id:
             if previous_role_id and previous_role_id != new_role_id:
                 role_to_remove = guild.get_role(previous_role_id)
@@ -171,22 +183,22 @@ async def on_message(message):
     if leveled_up:
         user_data[user_id]["level"] = level
         user_data[user_id]["xp"] = xp
-
         try:
-            await message.channel.send(f"Çenesi düşük {message.author.mention},  seviye atladı. **seviye {level}**!")
+            await message.channel.send(f"Çenesi düşük {message.author.mention}, seviye atladı. **seviye {level}**!")
         except Exception as e:
             print(f"Seviye mesajı gönderilemedi: {e}")
     else:
         user_data[user_id]["xp"] = xp
 
     await bot.process_commands(message)
+
     
     
 # -------------------- YARDIMCI FONKSİYONLAR --------------------
 
 from datetime import datetime
 
-LOG_CHANNEL_ID = 1372936287488573480  # Log kanal ID
+LOG_CHANNEL_ID = 1272888204206407710  # Log kanal ID
 MUTE_ROLE_NAME = "Susturuldu"          # Susturma rol adı
 MUTE_DURATION_SECONDS = 7200            # 2 saat = 7200 saniye
 
@@ -206,6 +218,15 @@ async def log_warn(message, moderator, reason):
     await kanal.send(embed=embed)
 
 async def user_warn(message, reason, moderator=None):
+    # Eğer kullanıcının engellenmiş rolleri varsa, uyarı atma
+    try:
+        guild = message.guild
+        member = guild.get_member(message.author.id) if guild else None
+        if member_has_blocked_role(member):
+            return
+    except Exception:
+        pass
+
     kanal = bot.get_channel(LOG_CHANNEL_ID)
     user_id = message.author.id
     user_warnings[user_id] = user_warnings.get(user_id, 0) + 1
@@ -414,29 +435,39 @@ async def help(ctx):
 
 # ÜYE KOMUTLARI --------------------------------------------------------------------
 
+from discord.ext import commands
+
+bot = commands.Bot(
+    command_prefix="!",
+    intents=discord.Intents.all(),
+    case_insensitive=True
+)
+
+
 @bot.command()
 async def sa(ctx):
     await ctx.send(f'{ctx.author.mention} Aleyküm selam, hoş geldin!')
 
 @bot.command()
 async def bb(ctx):
-    await ctx.send(f'Hoşçakal {ctx.author.mention},')
-    
+    await ctx.send(f'Hoşçakal {ctx.author.mention}')
+
 @bot.command()
 async def gacaman(ctx):
-    await ctx.send(f'Gurtulaman Gıbrıs Polisindennn')
+    await ctx.send('Gurtulaman Gıbrıs Polisindennn')
 
 @bot.command()
 async def dc(ctx):
-    await ctx.send('https://discord.gg/s2gespor')
-    
+    await ctx.send('https://discord.gg/BRp6Bc8Y2q')
+
 @bot.command()
 async def insta(ctx):
-    await ctx.send('https://instagram.com/s2gespor')
-    
+    await ctx.send('https://instagram.com/s2gmaxg')
+
 @bot.command()
 async def yt(ctx):
-    await ctx.send('https://youtube.com/@s2gesports')
+    await ctx.send('https://youtube.com/@s2gmaxg')
+
 
 #------------------------------------------------------------------------------------------
 
@@ -494,7 +525,6 @@ async def infractions(ctx, member: discord.Member = None):
         await ctx.send(embed=embed)
     else:
         await ctx.send(f"{member} kullanıcısının ceza geçmişi yok.")
-
 
 
 
@@ -595,3 +625,5 @@ async def levels(ctx):
 
     embed.set_footer(text="🔹 En aktif kullanıcılar burada listelenir.")
     await ctx.send(embed=embed)
+
+# -------------------- HATA YAKALAMA --------------------
